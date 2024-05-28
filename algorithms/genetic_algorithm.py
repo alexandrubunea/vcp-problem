@@ -7,7 +7,8 @@ from typing import Tuple
 
 
 class GeneticAlgorithm:
-    def __init__(self, graph: GenerateGraph, population_size: int, generations: int, mutation_probability: float):
+    def __init__(self, graph: GenerateGraph, population_size: int, generations: int,
+                 mutation_probability: float, tournament_size: int, elitism: int):
         # Default values
         self.population = None
 
@@ -15,6 +16,8 @@ class GeneticAlgorithm:
         self.population_size = population_size
         self.generations = generations
         self.mutation_probability = mutation_probability
+        self.tournament_size = tournament_size
+        self.elitism = elitism
         self.graph = graph
 
         # Init the population
@@ -45,21 +48,30 @@ class GeneticAlgorithm:
             self.best_fitness_evolution.append(best_fitness)
             self.best_individual_evolution.append(best_individual)
 
-            # We reproduce the current population
             new_population = []
 
-            # We need to go just half of the population size, because we are adding two children every time
-            for _ in range(self.population_size // 2):
+            # Keep the elites in the future generation
+            sorted_indices_mask = np.argsort(fitness)[::-1]  # create a mask with indices sorted by fitness
+            self.population = self.population[sorted_indices_mask]  # apply the mask
+            new_population.extend(self.population[:self.elitism])  # move the elites into the new generation
+
+            # We reproduce the current population
+            while len(new_population) < self.population_size:
                 parent_a, parent_b = self.__select_individuals__()  # We get two parents at random
-                children_a, children_b = self.__crossover_genes__(parent_a, parent_b)  # Crossover the genes
+                child_a, child_b = self.__crossover_genes__(parent_a, parent_b)  # Crossover the genes
 
                 # The children may mutate
-                children_a = self.__mutate__(children_a)
-                children_b = self.__mutate__(children_b)
+                child_a = self.__mutate__(child_a)
+                child_b = self.__mutate__(child_b)
 
                 # We add the children to the new population
-                new_population.append(children_a)
-                new_population.append(children_b)
+                new_population.append(child_a)
+
+                if len(new_population) < self.population_size:
+                    new_population.append(child_b)
+
+            assert len(new_population) == self.population_size, \
+                f"Expected population size {self.population_size}, but got {len(new_population)}"
 
             self.population = np.array(new_population)
 
@@ -141,30 +153,35 @@ class GeneticAlgorithm:
         return len(covered_edges) - len(selected_vertices)  # We must penalize according to the number of used vertices
 
     def __select_individuals__(self) -> Tuple[np.ndarray, np.ndarray]:
-        index_a, index_b = np.random.choice(len(self.population), 2, replace=False)
-        individual_a, individual_b = self.population[index_a], self.population[index_b]
+        def tournament_selection() -> np.ndarray:
+            # We will select the best candidate from a set of random candidates
+            participants = np.random.choice(self.population_size, self.tournament_size, replace=False)
 
-        return individual_a, individual_b
+            # Get the candidate with the best fitness
+            best_index = max(participants, key=lambda x: self.__fitness__(self.population[x]))
+            return self.population[best_index]
+
+        return tournament_selection(), tournament_selection()
 
     def __crossover_genes__(self, parent_a: np.ndarray, parent_b: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         # We must avoid the edges of the "genome" to have a good split
-        splitting_point = np.random.randint(1, self.graph.get_graph().number_of_nodes() - 1)
+        splitting_point = np.random.randint(self.graph.get_graph().number_of_nodes())
 
         # We split the parents
         parent_a_split = np.split(parent_a, [splitting_point])
         parent_b_split = np.split(parent_b, [splitting_point])
 
         # We create the children
-        children_a = np.concatenate((parent_a_split[0], parent_b_split[1]), axis=0)
-        children_b = np.concatenate((parent_b_split[0], parent_a_split[1]), axis=0)
+        child_a = np.concatenate((parent_a_split[0], parent_b_split[1]), axis=0)
+        child_b = np.concatenate((parent_b_split[0], parent_a_split[1]), axis=0)
 
-        return children_a, children_b
+        return child_a, child_b
 
-    def __mutate__(self, children: np.ndarray) -> np.ndarray:
+    def __mutate__(self, child: np.ndarray) -> np.ndarray:
         # We create a mutation mask using the mutation probability
         mutation = np.random.rand(self.graph.get_graph().number_of_nodes()) < self.mutation_probability
 
         # We apply the mask, flipping the bit k where mutation[k] is equal to 1
-        children[mutation] = 1 - children[mutation]
+        child[mutation] = 1 - child[mutation]
 
-        return children
+        return child
