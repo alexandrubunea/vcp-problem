@@ -77,6 +77,8 @@ class DPSO:
             self.best_fitness_evolution.append(self.global_best_fitness)
             self.best_particle_evolution.append(self.global_best[:])
 
+        print(f"The iterations have come to an end")
+
     def __initialize_population__(self):
         self.particle = np.random.randint(2, size=(self.population_size, self.solution_size))
         self.velocity = np.random.random((self.population_size, self.solution_size))
