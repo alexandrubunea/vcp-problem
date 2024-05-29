@@ -51,3 +51,12 @@ def show_solution(graph: nx.graph, best_individual_oat: np.ndarray, best_fitness
 
     # Print the corresponding values
     print(f"The best individual is {best_individual_oat} with a fitness of {best_fitness_value_oat}")
+
+
+def compare_metrics(metrics_a: list, metrics_b: list, name_a: str, name_b: str, title: str) -> None:
+    plt.plot(metrics_a, label=name_a)
+    plt.plot(metrics_b, label=name_b)
+
+    plt.title(title)
+    plt.legend()
+    plt.show()
